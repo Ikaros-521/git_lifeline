@@ -55,7 +55,44 @@ async function loadGitHub() {
 
       <div class="tab-content">
         <div v-if="activeTab === 'sample'" class="tab-pane">
-          <p>立即体验内置的示例仓库提交历史动画。无需配置，点击即可开始。</p>
+          <p>立即体验内置示例仓库。下面先看一眼动画预览和颜色含义，再一键开始。</p>
+          <div class="sample-preview">
+            <div class="preview-head">
+              <span class="preview-title">生命线预览</span>
+              <span class="preview-chip">Commit Timeline</span>
+            </div>
+            <svg viewBox="0 0 520 180" class="preview-svg" aria-hidden="true">
+              <defs>
+                <linearGradient id="previewGlow" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="var(--theme-tree-branch)" />
+                  <stop offset="100%" stop-color="var(--theme-tree-leaf)" />
+                </linearGradient>
+                <filter id="softBlur">
+                  <feGaussianBlur stdDeviation="2.5" />
+                </filter>
+              </defs>
+              <path d="M30,120 C120,50 220,145 300,80 C350,40 430,60 490,35" class="preview-link preview-link-glow" />
+              <path d="M30,120 C120,50 220,145 300,80 C350,40 430,60 490,35" class="preview-link" />
+              <circle cx="30" cy="120" r="8" class="preview-node node-base" />
+              <circle cx="130" cy="78" r="7" class="preview-node node-add" />
+              <circle cx="220" cy="126" r="7" class="preview-node node-mod" />
+              <circle cx="310" cy="82" r="7" class="preview-node node-base" />
+              <circle cx="405" cy="60" r="7" class="preview-node node-del" />
+              <circle cx="490" cy="35" r="8" class="preview-node node-add pulse-node" />
+              <text x="30" y="145" class="preview-label">init</text>
+              <text x="130" y="62" class="preview-label">feat/auth</text>
+              <text x="220" y="148" class="preview-label">refactor</text>
+              <text x="310" y="66" class="preview-label">docs</text>
+              <text x="405" y="44" class="preview-label">rollback</text>
+              <text x="490" y="18" class="preview-label">release</text>
+            </svg>
+            <div class="preview-legend">
+              <span class="legend-item"><i class="legend-dot dot-base"></i>普通节点（文件/目录）</span>
+              <span class="legend-item"><i class="legend-dot dot-add"></i>新增（Added）</span>
+              <span class="legend-item"><i class="legend-dot dot-mod"></i>修改（Modified）</span>
+              <span class="legend-item"><i class="legend-dot dot-del"></i>删除（Deleted）</span>
+            </div>
+          </div>
           <button class="btn-primary" @click="loadSample">🎬 开始体验</button>
         </div>
 
@@ -111,6 +148,10 @@ async function loadGitHub() {
   padding: 40px;
   border-radius: 16px;
   background: var(--theme-control-bg);
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 35%, transparent);
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .title {
@@ -157,6 +198,119 @@ async function loadGitHub() {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.sample-preview {
+  padding: 14px;
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 85% 20%, color-mix(in srgb, var(--theme-accent) 32%, transparent), transparent 48%),
+    linear-gradient(140deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.01));
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 45%, transparent);
+}
+
+.preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.preview-title {
+  font-size: 13px;
+  color: var(--theme-text-primary);
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.preview-chip {
+  font-size: 11px;
+  color: var(--theme-text-primary);
+  background: color-mix(in srgb, var(--theme-accent) 28%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 65%, transparent);
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+
+.preview-svg {
+  width: 100%;
+  height: 180px;
+  display: block;
+  border-radius: 10px;
+  background:
+    linear-gradient(0deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.preview-link {
+  fill: none;
+  stroke: url(#previewGlow);
+  stroke-width: 3;
+}
+
+.preview-link-glow {
+  stroke-width: 9;
+  opacity: 0.26;
+  filter: url(#softBlur);
+}
+
+.preview-node {
+  stroke: var(--theme-tree-node-stroke, #f8fafc);
+  stroke-width: 2;
+}
+
+.node-base { fill: var(--theme-tree-leaf); }
+.node-add { fill: var(--theme-tree-added); }
+.node-mod { fill: var(--theme-tree-modified); }
+.node-del { fill: var(--theme-tree-deleted); }
+
+.preview-label {
+  fill: var(--theme-tree-label-color, var(--theme-text-primary));
+  font-size: 11px;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: var(--theme-tree-label-outline, rgba(0, 0, 0, 0.8));
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.pulse-node {
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+.preview-legend {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--theme-text-primary);
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid var(--theme-tree-node-stroke, #fff);
+  flex-shrink: 0;
+}
+
+.dot-base { background: var(--theme-tree-leaf); }
+.dot-add { background: var(--theme-tree-added); }
+.dot-mod { background: var(--theme-tree-modified); }
+.dot-del { background: var(--theme-tree-deleted); }
+
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 0.95; }
+  50% { transform: scale(1.17); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.95; }
 }
 
 .hint {
