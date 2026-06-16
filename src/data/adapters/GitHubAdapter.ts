@@ -17,6 +17,11 @@ interface GitHubCommitData {
   files?: GitHubCommitFile[]
 }
 
+const DEFAULT_HEADERS = {
+  'Accept': 'application/vnd.github.v3+json',
+  'User-Agent': 'git-lifeline/1.0'
+}
+
 /**
  * Parse a GitHub repo URL into owner and repo name.
  * Supports: https://github.com/owner/repo, https://github.com/owner/repo.git
@@ -30,8 +35,10 @@ export function parseGitHubUrl(url: string): { owner: string; repo: string } | n
 /**
  * Fetch commits from the GitHub REST API (public repos, no auth needed).
  * Rate-limited to 60 requests/hour for unauthenticated requests.
- * The /commits list endpoint does not include file details, so we fetch
- * individual commit details in batches to get the files array.
+ *
+ * Strategy: the /commits list endpoint does NOT include file details.
+ * We try to fetch individual commit details for files, but gracefully
+ * degrade when rate-limited (returns commits with empty file lists).
  */
 export async function fetchGitHubCommits(
   owner: string,
@@ -47,9 +54,7 @@ export async function fetchGitHubCommits(
 
   for (let page = 1; page <= pages; page++) {
     const url = `https://api.github.com/repos/${owner}/${repo}/commits?per_page=${perPage}&page=${page}`
-    const res = await fetch(url, {
-      headers: { 'Accept': 'application/vnd.github.v3+json' }
-    })
+    const res = await fetch(url, { headers: DEFAULT_HEADERS })
 
     if (!res.ok) {
       throw new Error(`GitHub API error: ${res.status} ${res.statusText}`)
@@ -60,29 +65,37 @@ export async function fetchGitHubCommits(
     commitListItems.push(...data)
   }
 
-  // Phase 2: fetch individual commit details in batches to get the files array
-  const BATCH_SIZE = 5
+  // Phase 2: try to fetch individual commit details in small batches
+  // to get the files array. Silently skip on 403/rate-limit.
+  const BATCH_SIZE = 3
 
   for (let i = 0; i < commitListItems.length; i += BATCH_SIZE) {
     const batch = commitListItems.slice(i, i + BATCH_SIZE)
-    const details = await Promise.all(
+    const results = await Promise.allSettled(
       batch.map(item =>
         fetch(`https://api.github.com/repos/${owner}/${repo}/commits/${item.sha}`, {
-          headers: { 'Accept': 'application/vnd.github.v3+json' }
+          headers: DEFAULT_HEADERS
         }).then(res => {
-          if (!res.ok) throw new Error(`GitHub API error: ${res.status} ${res.statusText}`)
+          if (!res.ok) throw new Error(`GitHub API error: ${res.status}`)
           return res.json() as Promise<GitHubCommitData>
         })
       )
     )
 
-    for (const item of details) {
-      const files: FileChange[] = (item.files ?? []).map(f => ({
-        path: f.filename,
-        status: f.status === 'removed' ? 'deleted' : f.status,
-        additions: f.additions,
-        deletions: f.deletions
-      }))
+    for (let j = 0; j < results.length; j++) {
+      const item = batch[j]
+      const result = results[j]
+
+      let files: FileChange[] = []
+
+      if (result.status === 'fulfilled' && result.value.files) {
+        files = result.value.files.map(f => ({
+          path: f.filename,
+          status: f.status === 'removed' ? 'deleted' : (f.status === 'added' ? 'added' : 'modified'),
+          additions: f.additions,
+          deletions: f.deletions
+        }))
+      }
 
       allCommits.push({
         hash: item.sha,

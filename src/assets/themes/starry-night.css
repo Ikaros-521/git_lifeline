@@ -5,6 +5,12 @@
   --theme-tree-added: #34d399;
   --theme-tree-deleted: #fb7185;
   --theme-tree-modified: #fcd34d;
+  --theme-tree-node-stroke: #f8fafc;
+  --theme-tree-label-color: #f3e8ff;
+  --theme-tree-label-outline: rgba(12, 13, 43, 0.95);
+  --theme-tree-label-added: #6ee7b7;
+  --theme-tree-label-deleted: #fda4af;
+  --theme-tree-label-modified: #fde68a;
   --theme-text-primary: #f3e8ff;
   --theme-text-secondary: #a78bfa;
   --theme-accent: #fbbf24;

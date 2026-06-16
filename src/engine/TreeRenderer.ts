@@ -11,6 +11,12 @@ export interface TreeRendererOptions {
     treeAdded: string
     treeDeleted: string
     treeModified: string
+    treeNodeStroke: string
+    treeLabelColor: string
+    treeLabelOutline: string
+    treeLabelAdded: string
+    treeLabelDeleted: string
+    treeLabelModified: string
   }
 }
 
@@ -21,6 +27,13 @@ export class TreeRenderer {
   private height: number
   private theme: TreeRendererOptions['theme']
   private treeLayout: d3.TreeLayout<TreeNode>
+
+  private getNodeLabelColor(node: TreeNode): string {
+    if (node.isNew) return this.theme.treeLabelAdded
+    if (node.isDeleted) return this.theme.treeLabelDeleted
+    if (node.isModified) return this.theme.treeLabelModified
+    return this.theme.treeLabelColor
+  }
 
   constructor(opts: TreeRendererOptions) {
     this.svg = d3.select(opts.svgEl)
@@ -112,7 +125,7 @@ export class TreeRenderer {
         if (d.data.isModified) return this.theme.treeModified
         return this.theme.treeLeaf
       })
-      .attr('stroke', '#fff')
+      .attr('stroke', this.theme.treeNodeStroke)
       .attr('stroke-width', 1.5)
 
     // Add labels for nodes
@@ -121,7 +134,11 @@ export class TreeRenderer {
       .attr('dy', d => d.data.type === 'blob' ? 4 : -8)
       .attr('text-anchor', d => d.data.type === 'blob' ? 'start' : 'middle')
       .style('font-size', '11px')
-      .style('fill', '#ccc')
+      .style('fill', d => this.getNodeLabelColor(d.data))
+      .style('paint-order', 'stroke')
+      .style('stroke', this.theme.treeLabelOutline)
+      .style('stroke-width', '3px')
+      .style('stroke-linejoin', 'round')
       .text(d => d.data.name)
 
     // Merge transition
@@ -145,13 +162,11 @@ export class TreeRenderer {
         if (d.data.type === 'blob') return 4 + interProgress * 2
         return 6
       })
+      .attr('stroke', this.theme.treeNodeStroke)
 
     nodesMerge.select('text')
-      .style('fill', d => {
-        if (d.data.isNew) return this.theme.treeAdded
-        if (d.data.isDeleted) return this.theme.treeDeleted
-        return this.theme.treeLeaf
-      })
+      .style('fill', d => this.getNodeLabelColor(d.data))
+      .style('stroke', this.theme.treeLabelOutline)
       .text(d => d.data.name)
   }
 

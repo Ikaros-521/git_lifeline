@@ -51,13 +51,14 @@ function buildTreeFromFiles(files: string[], newFiles: Set<string>, deletedFiles
   return root
 }
 
-export function useCommitStore() {
-  const commits = ref<Commit[]>([])
-  const branches = ref<BranchNode[]>([])
-  const snapshots = ref<CommitSnapshot[]>([])
-  const loading = ref(false)
-  const error = ref<string | null>(null)
+/** Module-level singleton state */
+const commits = ref<Commit[]>([])
+const branches = ref<BranchNode[]>([])
+const snapshots = ref<CommitSnapshot[]>([])
+const loading = ref(false)
+const error = ref<string | null>(null)
 
+export function useCommitStore() {
   const totalCommits = computed(() => commits.value.length)
   const hasData = computed(() => commits.value.length > 0)
 

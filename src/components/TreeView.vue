@@ -37,7 +37,13 @@ onMounted(() => {
       treeLeaf: vars.treeLeaf,
       treeAdded: vars.treeAdded,
       treeDeleted: vars.treeDeleted,
-      treeModified: vars.treeModified
+      treeModified: vars.treeModified,
+      treeNodeStroke: vars.treeNodeStroke,
+      treeLabelColor: vars.treeLabelColor,
+      treeLabelOutline: vars.treeLabelOutline,
+      treeLabelAdded: vars.treeLabelAdded,
+      treeLabelDeleted: vars.treeLabelDeleted,
+      treeLabelModified: vars.treeLabelModified
     }
   })
 

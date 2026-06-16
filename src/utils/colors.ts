@@ -25,6 +25,12 @@ export function getThemeVars() {
     treeAdded: getCSSVar('--theme-tree-added'),
     treeDeleted: getCSSVar('--theme-tree-deleted'),
     treeModified: getCSSVar('--theme-tree-modified'),
+    treeNodeStroke: getCSSVar('--theme-tree-node-stroke'),
+    treeLabelColor: getCSSVar('--theme-tree-label-color'),
+    treeLabelOutline: getCSSVar('--theme-tree-label-outline'),
+    treeLabelAdded: getCSSVar('--theme-tree-label-added'),
+    treeLabelDeleted: getCSSVar('--theme-tree-label-deleted'),
+    treeLabelModified: getCSSVar('--theme-tree-label-modified'),
     particleColor: getCSSVar('--theme-particle-color'),
     particleCount: parseInt(getCSSVar('--theme-particle-count')) || 80,
   }

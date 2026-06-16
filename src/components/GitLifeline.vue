@@ -28,30 +28,37 @@ const commitsList = computed(() => store.commits.value as unknown as Commit[])
 const currentCommit = computed(() => commitsList.value[selectedCommitIndex.value])
 const currentSnapshot = computed(() => store.snapshots.value[selectedCommitIndex.value] ?? null)
 
+// Watch data + renderer ready state to trigger initial render
+const readyToRender = computed(() =>
+  store.snapshots.value.length > 0 && treeViewRef.value?.renderer != null
+)
+
+watch(readyToRender, (ready) => {
+  if (!ready) return
+  const idx = engine.currentIndex.value
+  const snapshot = store.snapshots.value[idx]
+  if (!snapshot) return
+  treeViewRef.value!.renderer!.update(snapshot.tree, engine.interProgress.value)
+  const themeVars = getThemeVars()
+  particleRef.value?.system?.setTheme(themeVars.particleColor, themeVars.particleCount)
+  selectedCommitIndex.value = idx
+  console.log('[GitLifeline] initial render', idx, snapshot.commit.hash, snapshot.commit.files.length)
+})
+
 // Sync engine total when data loads
 watch(() => store.totalCommits.value, (n) => {
   engine.setTotal(n)
 })
 
-// When animation index changes, update tree + particles
-watch([() => engine.currentIndex.value, () => engine.interProgress.value, () => store.snapshots.value.length], ([idx, progress]) => {
+// When animation index/progress changes (playback), update tree + particles
+watch([() => engine.currentIndex.value, () => engine.interProgress.value], ([idx, progress]) => {
   if (store.snapshots.value.length === 0) return
-  const svg = treeViewRef.value?.getSvgElement()
-  const canvas = particleRef.value?.getCanvasElement()
-  if (!svg || !canvas) return
-
   const snapshot = store.snapshots.value[idx]
   if (!snapshot) return
-
   if (!treeViewRef.value?.renderer) return
   treeViewRef.value.renderer.update(snapshot.tree, progress)
-
-  if (!particleRef.value?.system) return
-  const themeVars = getThemeVars()
-  particleRef.value.system.setTheme(themeVars.particleColor, themeVars.particleCount)
-
   selectedCommitIndex.value = idx
-}, { immediate: true })
+})
 
 // Watch theme changes to update renderer
 watch(currentTheme, () => {
@@ -62,7 +69,13 @@ watch(currentTheme, () => {
     treeLeaf: vars.treeLeaf,
     treeAdded: vars.treeAdded,
     treeDeleted: vars.treeDeleted,
-    treeModified: vars.treeModified
+    treeModified: vars.treeModified,
+    treeNodeStroke: vars.treeNodeStroke,
+    treeLabelColor: vars.treeLabelColor,
+    treeLabelOutline: vars.treeLabelOutline,
+    treeLabelAdded: vars.treeLabelAdded,
+    treeLabelDeleted: vars.treeLabelDeleted,
+    treeLabelModified: vars.treeLabelModified
   })
 })
 
