@@ -20,11 +20,12 @@ export function useAnimationEngine(totalSteps: number) {
     interProgress.value += (delta * speed.value) / (EASE_DURATION / 1000)
 
     if (interProgress.value >= 1) {
-      interProgress.value = 0
       if (currentIndex.value < totalCommits.value - 1) {
+        interProgress.value = 0
         currentIndex.value++
       } else {
-        stop()
+        interProgress.value = 1
+        pause()
         return
       }
     }
