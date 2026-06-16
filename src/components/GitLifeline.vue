@@ -4,6 +4,7 @@ import { useCommitStore } from '../composables/useCommitStore'
 import { useAnimationEngine } from '../composables/useAnimationEngine'
 import { getThemeVars } from '../utils/colors'
 import type { Commit } from '../data/types'
+import type { BurstPoint } from '../engine/TreeRenderer'
 import TreeView from './TreeView.vue'
 import ParticleCanvas from './ParticleCanvas.vue'
 import TimelineControl from './TimelineControl.vue'
@@ -28,6 +29,22 @@ const commitsList = computed(() => store.commits.value as unknown as Commit[])
 const currentCommit = computed(() => commitsList.value[selectedCommitIndex.value])
 const currentSnapshot = computed(() => store.snapshots.value[selectedCommitIndex.value] ?? null)
 
+// Fire particle bursts for the change points reported by the tree renderer.
+function handleBurst(points: BurstPoint[]) {
+  const canvas = particleRef.value
+  if (!canvas) return
+  const vars = getThemeVars()
+  const colorFor = (kind: BurstPoint['kind']) =>
+    kind === 'added' ? vars.treeAdded
+      : kind === 'deleted' ? vars.treeDeleted
+        : vars.treeModified
+  for (const pt of points) {
+    // Deletions get a denser, more violent burst for impact.
+    const n = pt.kind === 'deleted' ? 24 : pt.kind === 'added' ? 18 : 12
+    canvas.burst(pt.x, pt.y, colorFor(pt.kind), n)
+  }
+}
+
 // Watch data + renderer ready state to trigger initial render
 const readyToRender = computed(() =>
   store.snapshots.value.length > 0 && treeViewRef.value?.renderer != null
@@ -35,10 +52,12 @@ const readyToRender = computed(() =>
 
 watch(readyToRender, (ready) => {
   if (!ready) return
+  // Register burst callback now that the renderer exists.
+  treeViewRef.value!.renderer!.setOnBurst(handleBurst)
   const idx = engine.currentIndex.value
   const snapshot = store.snapshots.value[idx]
   if (!snapshot) return
-  treeViewRef.value!.renderer!.update(snapshot.tree, engine.interProgress.value)
+  treeViewRef.value!.renderer!.update(snapshot.tree, engine.interProgress.value, idx)
   const themeVars = getThemeVars()
   particleRef.value?.system?.setTheme(themeVars.particleColor, themeVars.particleCount)
   selectedCommitIndex.value = idx
@@ -56,7 +75,7 @@ watch([() => engine.currentIndex.value, () => engine.interProgress.value], ([idx
   const snapshot = store.snapshots.value[idx]
   if (!snapshot) return
   if (!treeViewRef.value?.renderer) return
-  treeViewRef.value.renderer.update(snapshot.tree, progress)
+  treeViewRef.value.renderer.update(snapshot.tree, progress, idx)
   selectedCommitIndex.value = idx
 })
 

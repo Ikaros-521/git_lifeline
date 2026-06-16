@@ -107,6 +107,9 @@ export function useCommitStore() {
   function buildSnapshots() {
     const cumulative = new Set<string>()
     const snap: CommitSnapshot[] = []
+    // Files deleted in the *previous* commit, removed at the start of this one
+    // so the deleted node stays visible for one full snapshot and can fade out.
+    let pendingRemovals: string[] = []
 
     for (let i = 0; i < commits.value.length; i++) {
       const commit = commits.value[i]
@@ -114,13 +117,19 @@ export function useCommitStore() {
       const deletedFiles = new Set<string>()
       const modifiedFiles = new Set<string>()
 
+      // Retire files that were marked deleted in the previous snapshot.
+      for (const path of pendingRemovals) cumulative.delete(path)
+      pendingRemovals = []
+
       for (const file of commit.files) {
         if (file.status === 'added') {
           cumulative.add(file.path)
           newFiles.add(file.path)
         } else if (file.status === 'deleted') {
-          cumulative.delete(file.path)
+          // Keep the file in the tree this snapshot so it can animate out,
+          // then schedule its removal for the next commit.
           deletedFiles.add(file.path)
+          pendingRemovals.push(file.path)
         } else if (file.status === 'modified') {
           modifiedFiles.add(file.path)
         }

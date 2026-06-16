@@ -10,6 +10,11 @@ function getCanvasElement(): HTMLCanvasElement | null {
   return canvasRef.value
 }
 
+/** Fire a particle burst at a canvas-local coordinate. */
+function burst(x: number, y: number, color: string, n?: number) {
+  system.value?.spawnBurst(x, y, color, n)
+}
+
 function resize() {
   system.value?.resize()
 }
@@ -30,7 +35,7 @@ onUnmounted(() => {
   resizeObs?.disconnect()
 })
 
-defineExpose({ getCanvasElement, system })
+defineExpose({ getCanvasElement, burst, system })
 </script>
 
 <template>

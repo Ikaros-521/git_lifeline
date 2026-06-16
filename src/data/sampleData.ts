@@ -118,11 +118,86 @@ export function getSampleCommits(): { commits: Commit[]; branches: BranchNode[] 
         { path: 'src/core/runner.ts', status: 'added', additions: 80, deletions: 0 },
         { path: 'src/core/types.ts', status: 'added', additions: 30, deletions: 0 }
       ]
+    },
+    {
+      hash: 'i9j0k1l',
+      author: 'Charlie',
+      email: 'charlie@example.com',
+      date: '2025-01-24T15:00:00Z',
+      message: 'feat: iterate on API client and runner',
+      branches: ['main'],
+      parents: ['h8i9j0k'],
+      files: [
+        { path: 'src/api/client.ts', status: 'modified', additions: 40, deletions: 22 },
+        { path: 'src/api/endpoints.ts', status: 'modified', additions: 18, deletions: 6 },
+        { path: 'src/core/runner.ts', status: 'modified', additions: 25, deletions: 10 },
+        { path: 'src/components/Modal.tsx', status: 'modified', additions: 12, deletions: 30 }
+      ]
+    },
+    {
+      hash: 'j0k1l2m',
+      author: 'Alice',
+      email: 'alice@example.com',
+      date: '2025-01-28T11:00:00Z',
+      message: 'chore: drop legacy API in favor of db layer',
+      branches: ['main'],
+      parents: ['i9j0k1l'],
+      files: [
+        { path: 'src/api/client.ts', status: 'deleted', additions: 0, deletions: 105 },
+        { path: 'src/api/endpoints.ts', status: 'deleted', additions: 0, deletions: 88 },
+        { path: 'src/api/types.ts', status: 'deleted', additions: 0, deletions: 35 },
+        { path: 'src/db/repository.ts', status: 'added', additions: 95, deletions: 0 }
+      ]
+    },
+    {
+      hash: 'k1l2m3n',
+      author: 'Bob',
+      email: 'bob@example.com',
+      date: '2025-02-02T09:00:00Z',
+      message: 'feat: ship dashboard UI',
+      branches: ['main'],
+      parents: ['j0k1l2m'],
+      files: [
+        { path: 'src/components/Dashboard.tsx', status: 'added', additions: 140, deletions: 0 },
+        { path: 'src/components/Chart.tsx', status: 'added', additions: 90, deletions: 0 },
+        { path: 'src/components/Button.tsx', status: 'modified', additions: 8, deletions: 4 },
+        { path: 'src/db/repository.ts', status: 'modified', additions: 30, deletions: 5 }
+      ]
+    },
+    {
+      hash: 'l2m3n4o',
+      author: 'Charlie',
+      email: 'charlie@example.com',
+      date: '2025-02-07T14:00:00Z',
+      message: 'refactor: consolidate core, drop runner',
+      branches: ['main'],
+      parents: ['k1l2m3n'],
+      files: [
+        { path: 'src/core/runner.ts', status: 'deleted', additions: 0, deletions: 95 },
+        { path: 'src/core/parser.ts', status: 'modified', additions: 50, deletions: 20 },
+        { path: 'src/core/scheduler.ts', status: 'added', additions: 110, deletions: 0 },
+        { path: 'src/db/repository.ts', status: 'modified', additions: 22, deletions: 12 }
+      ]
+    },
+    {
+      hash: 'm3n4o5p',
+      author: 'Alice',
+      email: 'alice@example.com',
+      date: '2025-02-12T16:00:00Z',
+      message: 'feat: polish and expand test suite',
+      branches: ['main'],
+      parents: ['l2m3n4o'],
+      files: [
+        { path: 'tests/db/repository.test.ts', status: 'added', additions: 70, deletions: 0 },
+        { path: 'tests/components/Dashboard.test.ts', status: 'added', additions: 55, deletions: 0 },
+        { path: 'tests/core.test.ts', status: 'modified', additions: 30, deletions: 18 },
+        { path: 'src/components/Chart.tsx', status: 'modified', additions: 24, deletions: 9 }
+      ]
     }
   ]
 
   const branches: BranchNode[] = [
-    { name: 'main', commitHashes: ['a1b2c3d', 'b2c3d4e', 'c3d4e5f', 'd4e5f6g', 'e5f6g7h', 'f6g7h8i', 'g7h8i9j', 'h8i9j0k'], color: '#4ade80' },
+    { name: 'main', commitHashes: ['a1b2c3d', 'b2c3d4e', 'c3d4e5f', 'd4e5f6g', 'e5f6g7h', 'f6g7h8i', 'g7h8i9j', 'h8i9j0k', 'i9j0k1l', 'j0k1l2m', 'k1l2m3n', 'l2m3n4o', 'm3n4o5p'], color: '#4ade80' },
     { name: 'ci', commitHashes: ['e5f6g7h'], color: '#f59e0b', parentBranch: 'main' }
   ]
 
