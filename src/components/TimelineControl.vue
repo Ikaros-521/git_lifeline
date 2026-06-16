@@ -188,11 +188,25 @@ function onSliderInput(e: Event) {
 .speed-select {
   padding: 4px 8px;
   border: 1px solid var(--theme-text-secondary);
-  background: transparent;
+  background: var(--theme-bg);
   color: var(--theme-text-primary);
   border-radius: 4px;
   font-size: 12px;
   cursor: pointer;
+}
+
+.speed-select:hover {
+  border-color: var(--theme-accent);
+}
+
+.speed-select:focus {
+  outline: none;
+  border-color: var(--theme-accent);
+}
+
+.speed-select option {
+  background: var(--theme-bg);
+  color: var(--theme-text-primary);
 }
 
 .commit-message-bar {
