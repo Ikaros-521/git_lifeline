@@ -1,0 +1,14 @@
+.theme-dawn-garden {
+  --theme-bg: #faf5f0;
+  --theme-tree-branch: #8b5e3c;
+  --theme-tree-leaf: #4a7c59;
+  --theme-tree-added: #2d8a4e;
+  --theme-tree-deleted: #c44536;
+  --theme-tree-modified: #d4a017;
+  --theme-text-primary: #2d2d2d;
+  --theme-text-secondary: #6b7280;
+  --theme-accent: #4a7c59;
+  --theme-particle-color: #8b5e3c;
+  --theme-particle-count: 40;
+  --theme-control-bg: rgba(255, 251, 235, 0.9);
+}

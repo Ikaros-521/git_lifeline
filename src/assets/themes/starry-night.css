@@ -1,0 +1,14 @@
+.theme-starry-night {
+  --theme-bg: #0c0d2b;
+  --theme-tree-branch: #fbbf24;
+  --theme-tree-leaf: #c084fc;
+  --theme-tree-added: #34d399;
+  --theme-tree-deleted: #fb7185;
+  --theme-tree-modified: #fcd34d;
+  --theme-text-primary: #f3e8ff;
+  --theme-text-secondary: #a78bfa;
+  --theme-accent: #fbbf24;
+  --theme-particle-color: #fbbf24;
+  --theme-particle-count: 120;
+  --theme-control-bg: rgba(12, 13, 43, 0.85);
+}
