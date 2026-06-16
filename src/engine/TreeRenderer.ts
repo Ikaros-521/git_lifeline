@@ -104,11 +104,10 @@ export class TreeRenderer {
     const links = this.g.selectAll<SVGPathElement, d3.HierarchyPointLink<TreeNode>>('path.link')
       .data(root.links(), d => `${d.source.data.id}-${d.target.data.id}`)
 
-    links.exit()
-      .transition()
-      .duration(300)
-      .attr('opacity', 0)
-      .remove()
+    // Remove immediately: update() runs every frame, so a .transition().remove()
+    // here would be re-scheduled each frame and the node would never actually leave.
+    // Animated departures are handled via the isDeleted flag in the snapshot itself.
+    links.exit().remove()
 
     const linksEnter = links.enter().append('path')
       .attr('class', 'link')
@@ -142,11 +141,7 @@ export class TreeRenderer {
     const nodes = this.g.selectAll<SVGGElement, d3.HierarchyPointNode<TreeNode>>('g.node')
       .data(root.descendants(), d => d.data.id)
 
-    nodes.exit()
-      .transition()
-      .duration(300)
-      .attr('opacity', 0)
-      .remove()
+    nodes.exit().remove()
 
     const nodesEnter = nodes.enter().append('g')
       .attr('class', 'node')
