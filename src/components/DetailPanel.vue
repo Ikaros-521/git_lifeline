@@ -10,8 +10,8 @@ const emit = defineEmits<{ close: [] }>()
 </script>
 
 <template>
-  <div class="detail-overlay" @click.self="emit('close')">
-    <div class="detail-panel" v-if="commit">
+  <div class="detail-overlay" v-if="commit" @click.self="emit('close')">
+    <div class="detail-panel">
       <button class="close-btn" @click="emit('close')">✕</button>
       <h2 class="detail-title">提交详情</h2>
 

@@ -34,7 +34,8 @@ watch(() => store.totalCommits.value, (n) => {
 })
 
 // When animation index changes, update tree + particles
-watch([() => engine.currentIndex.value, () => engine.interProgress.value], ([idx, progress]) => {
+watch([() => engine.currentIndex.value, () => engine.interProgress.value, () => store.snapshots.value.length], ([idx, progress]) => {
+  if (store.snapshots.value.length === 0) return
   const svg = treeViewRef.value?.getSvgElement()
   const canvas = particleRef.value?.getCanvasElement()
   if (!svg || !canvas) return
@@ -50,7 +51,7 @@ watch([() => engine.currentIndex.value, () => engine.interProgress.value], ([idx
   particleRef.value.system.setTheme(themeVars.particleColor, themeVars.particleCount)
 
   selectedCommitIndex.value = idx
-})
+}, { immediate: true })
 
 // Watch theme changes to update renderer
 watch(currentTheme, () => {
