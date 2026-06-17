@@ -2,7 +2,7 @@ import { ref, computed } from 'vue'
 import type { Commit, BranchNode, TreeNode, CommitSnapshot } from '../data/types'
 import { getSampleCommits } from '../data/sampleData'
 import { parseGitLog } from '../data/adapters/GitLogParser'
-import { fetchGitHubCommits, parseGitHubUrl } from '../data/adapters/GitHubAdapter'
+import { fetchGitHubCommits, parseGitHubUrl, type GitHubFetchOptions } from '../data/adapters/GitHubAdapter'
 
 /** Build a hierarchical tree from a set of file paths at a given commit snapshot. */
 function buildTreeFromFiles(files: string[], newFiles: Set<string>, deletedFiles: Set<string>, modifiedFiles: Set<string>): TreeNode {
@@ -84,7 +84,7 @@ export function useCommitStore() {
   }
 
   /** Load from GitHub API */
-  async function loadFromGitHub(url: string) {
+  async function loadFromGitHub(url: string, options?: GitHubFetchOptions) {
     const parsed = parseGitHubUrl(url)
     if (!parsed) {
       error.value = '无效的 GitHub 仓库 URL'
@@ -93,7 +93,7 @@ export function useCommitStore() {
     loading.value = true
     error.value = null
     try {
-      commits.value = await fetchGitHubCommits(parsed.owner, parsed.repo)
+      commits.value = await fetchGitHubCommits(parsed.owner, parsed.repo, options)
       branches.value = inferBranches(commits.value)
       buildSnapshots()
     } catch (e) {

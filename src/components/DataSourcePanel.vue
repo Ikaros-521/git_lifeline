@@ -7,10 +7,74 @@ const emit = defineEmits<{ 'data-loaded': [] }>()
 
 const store = useCommitStore()
 
+type DatePreset = 'week' | 'month' | 'quarter' | 'halfYear' | 'year' | 'custom'
+
+const DATE_PRESETS: { id: DatePreset; label: string; days?: number }[] = [
+  { id: 'week', label: '近一周', days: 7 },
+  { id: 'month', label: '近一月', days: 30 },
+  { id: 'quarter', label: '近三月', days: 90 },
+  { id: 'halfYear', label: '近半年', days: 180 },
+  { id: 'year', label: '近一年', days: 365 },
+  { id: 'custom', label: '自定义' }
+]
+
 const activeTab = ref<'sample' | 'paste' | 'github'>('sample')
 const pasteText = ref('')
 const githubUrl = ref('')
 const loadingMsg = ref('')
+const datePreset = ref<DatePreset>('month')
+const customSince = ref('')
+const customUntil = ref('')
+
+function daysAgo(days: number): Date {
+  const d = new Date()
+  d.setDate(d.getDate() - days)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+function toDateInputValue(date: Date): string {
+  return date.toISOString().slice(0, 10)
+}
+
+function getGitHubDateRange(): { since: Date; until: Date } {
+  const until = new Date()
+  until.setHours(23, 59, 59, 999)
+
+  if (datePreset.value === 'custom') {
+    const since = customSince.value
+      ? new Date(`${customSince.value}T00:00:00`)
+      : daysAgo(30)
+    const customEnd = customUntil.value
+      ? new Date(`${customUntil.value}T23:59:59`)
+      : until
+    return { since, until: customEnd }
+  }
+
+  const preset = DATE_PRESETS.find(p => p.id === datePreset.value)
+  return { since: daysAgo(preset?.days ?? 30), until }
+}
+
+function selectPreset(id: DatePreset) {
+  if (id === 'custom') {
+    const prevPreset = DATE_PRESETS.find(p => p.id === datePreset.value)
+    if (prevPreset?.days) {
+      const until = new Date()
+      customSince.value = toDateInputValue(daysAgo(prevPreset.days))
+      customUntil.value = toDateInputValue(until)
+    } else if (!customSince.value || !customUntil.value) {
+      const until = new Date()
+      customSince.value = toDateInputValue(daysAgo(30))
+      customUntil.value = toDateInputValue(until)
+    }
+  }
+  datePreset.value = id
+}
+
+function formatRangeLabel(): string {
+  const { since, until } = getGitHubDateRange()
+  return `${since.toLocaleDateString('zh-CN')} — ${until.toLocaleDateString('zh-CN')}`
+}
 
 async function loadSample() {
   store.loadSample()
@@ -25,8 +89,9 @@ function loadPaste() {
 
 async function loadGitHub() {
   if (!githubUrl.value.trim()) return
-  loadingMsg.value = '正在从 GitHub 获取提交数据...'
-  await store.loadFromGitHub(githubUrl.value)
+  const range = getGitHubDateRange()
+  loadingMsg.value = `正在获取 ${formatRangeLabel()} 的提交...`
+  await store.loadFromGitHub(githubUrl.value, range)
   loadingMsg.value = ''
   if (!store.error.value) emit('data-loaded')
 }
@@ -118,6 +183,32 @@ async function loadGitHub() {
             class="url-input"
             placeholder="例如: https://github.com/vuejs/core"
           />
+          <div class="date-range-section">
+            <div class="date-range-head">
+              <span class="date-range-label">提交日期范围</span>
+              <span class="date-range-hint">缩小范围可减少请求量，降低限流风险</span>
+            </div>
+            <div class="date-presets">
+              <button
+                v-for="preset in DATE_PRESETS"
+                :key="preset.id"
+                type="button"
+                :class="['preset-btn', { active: datePreset === preset.id }]"
+                @click="selectPreset(preset.id)"
+              >{{ preset.label }}</button>
+            </div>
+            <div v-if="datePreset === 'custom'" class="custom-dates">
+              <label class="date-field">
+                <span>起始</span>
+                <input v-model="customSince" type="date" class="date-input" />
+              </label>
+              <label class="date-field">
+                <span>截止</span>
+                <input v-model="customUntil" type="date" class="date-input" />
+              </label>
+            </div>
+            <p class="range-summary">当前范围：{{ formatRangeLabel() }}</p>
+          </div>
           <button class="btn-primary" :disabled="!githubUrl.trim() || !!loadingMsg" @click="loadGitHub">
             {{ loadingMsg || '⬇️ 获取数据' }}
           </button>
@@ -334,6 +425,84 @@ async function loadGitHub() {
 
 .url-input {
   font-family: inherit;
+}
+
+.date-range-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.15);
+  border: 1px solid color-mix(in srgb, var(--theme-text-secondary) 40%, transparent);
+}
+
+.date-range-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.date-range-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.date-range-hint {
+  font-size: 12px;
+  color: var(--theme-text-secondary);
+}
+
+.date-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.preset-btn {
+  padding: 6px 12px;
+  border: 1px solid var(--theme-text-secondary);
+  background: transparent;
+  color: var(--theme-text-primary);
+  border-radius: 999px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.preset-btn.active {
+  background: color-mix(in srgb, var(--theme-accent) 25%, transparent);
+  border-color: var(--theme-accent);
+  color: var(--theme-text-primary);
+}
+
+.custom-dates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.date-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--theme-text-secondary);
+}
+
+.date-input {
+  padding: 8px 10px;
+  border: 1px solid var(--theme-text-secondary);
+  background: rgba(0, 0, 0, 0.15);
+  color: var(--theme-text-primary);
+  border-radius: 8px;
+  font-family: inherit;
+}
+
+.range-summary {
+  margin: 0;
+  font-size: 12px;
+  color: var(--theme-text-secondary);
 }
 
 .btn-primary {
