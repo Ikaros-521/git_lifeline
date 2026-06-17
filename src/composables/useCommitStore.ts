@@ -2,7 +2,12 @@ import { ref, computed } from 'vue'
 import type { Commit, BranchNode, TreeNode, CommitSnapshot } from '../data/types'
 import { getSampleCommits } from '../data/sampleData'
 import { parseGitLog } from '../data/adapters/GitLogParser'
-import { fetchGitHubCommits, parseGitHubUrl, type GitHubFetchOptions } from '../data/adapters/GitHubAdapter'
+import {
+  fetchGitHubCommits,
+  parseGitHubUrl,
+  type GitHubFetchOptions,
+  type GitHubProgressLog
+} from '../data/adapters/GitHubAdapter'
 
 /** Build a hierarchical tree from a set of file paths at a given commit snapshot. */
 function buildTreeFromFiles(files: string[], newFiles: Set<string>, deletedFiles: Set<string>, modifiedFiles: Set<string>): TreeNode {
@@ -57,6 +62,8 @@ const branches = ref<BranchNode[]>([])
 const snapshots = ref<CommitSnapshot[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
+const warning = ref<string | null>(null)
+const fetchLogs = ref<GitHubProgressLog[]>([])
 
 export function useCommitStore() {
   const totalCommits = computed(() => commits.value.length)
@@ -68,6 +75,8 @@ export function useCommitStore() {
     commits.value = data.commits
     branches.value = data.branches
     error.value = null
+    warning.value = null
+    fetchLogs.value = []
     buildSnapshots()
   }
 
@@ -77,6 +86,8 @@ export function useCommitStore() {
       commits.value = parseGitLog(raw)
       branches.value = inferBranches(commits.value)
       error.value = null
+      warning.value = null
+      fetchLogs.value = []
       buildSnapshots()
     } catch (e) {
       error.value = `解析失败: ${e instanceof Error ? e.message : String(e)}`
@@ -92,10 +103,27 @@ export function useCommitStore() {
     }
     loading.value = true
     error.value = null
+    warning.value = null
+    fetchLogs.value = []
     try {
-      commits.value = await fetchGitHubCommits(parsed.owner, parsed.repo, options)
+      const result = await fetchGitHubCommits(parsed.owner, parsed.repo, {
+        ...options,
+        onProgress: (log) => {
+          fetchLogs.value = [...fetchLogs.value, log]
+        }
+      })
+      commits.value = result.commits
       branches.value = inferBranches(commits.value)
-      buildSnapshots()
+
+      if (result.warnings.length) {
+        warning.value = result.warnings.join('；')
+      }
+
+      if (commits.value.length === 0) {
+        error.value = '未获取到任何提交，请检查仓库 URL 或缩小/调整日期范围'
+      } else {
+        buildSnapshots()
+      }
     } catch (e) {
       error.value = `加载失败: ${e instanceof Error ? e.message : String(e)}`
     } finally {
@@ -157,6 +185,8 @@ export function useCommitStore() {
     snapshots,
     loading,
     error,
+    warning,
+    fetchLogs,
     totalCommits,
     hasData,
     loadSample,

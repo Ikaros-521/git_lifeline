@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch, nextTick } from 'vue'
 import { useCommitStore } from '../composables/useCommitStore'
 import { getGitLogHint, GIT_LOG_SINCE_PRESETS, type GitLogShell } from '../data/adapters/GitLogParser'
+import type { GitHubProgressLog } from '../data/adapters/GitHubAdapter'
 
 const emit = defineEmits<{ 'data-loaded': [] }>()
 
@@ -26,7 +27,7 @@ const GIT_LOG_SHELLS: { id: GitLogShell; label: string }[] = [
 const activeTab = ref<'sample' | 'paste' | 'github'>('sample')
 const pasteText = ref('')
 const githubUrl = ref('')
-const loadingMsg = ref('')
+const fetchLogRef = ref<HTMLElement | null>(null)
 const datePreset = ref<DatePreset>('month')
 const customSince = ref('')
 const customUntil = ref('')
@@ -129,11 +130,27 @@ function loadFromLogFile(event: Event) {
 async function loadGitHub() {
   if (!githubUrl.value.trim()) return
   const range = getGitHubDateRange()
-  loadingMsg.value = `正在获取 ${formatRangeLabel()} 的提交...`
   await store.loadFromGitHub(githubUrl.value, range)
-  loadingMsg.value = ''
-  if (!store.error.value) emit('data-loaded')
+  if (store.hasData.value) emit('data-loaded')
 }
+
+function formatLogTime(ts: number): string {
+  const d = new Date(ts)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`
+}
+
+function logLevelClass(level: GitHubProgressLog['level']): string {
+  return `log-${level}`
+}
+
+watch(
+  () => store.fetchLogs.value.length,
+  async () => {
+    await nextTick()
+    const el = fetchLogRef.value
+    if (el) el.scrollTop = el.scrollHeight
+  }
+)
 </script>
 
 <template>
@@ -293,12 +310,37 @@ async function loadGitHub() {
             </div>
             <p class="range-summary">当前范围：{{ formatRangeLabel() }}</p>
           </div>
-          <button class="btn-primary" :disabled="!githubUrl.trim() || !!loadingMsg" @click="loadGitHub">
-            {{ loadingMsg || '⬇️ 获取数据' }}
+          <button class="btn-primary" :disabled="!githubUrl.trim() || store.loading.value" @click="loadGitHub">
+            {{ store.loading.value ? '获取中…' : '⬇️ 获取数据' }}
           </button>
+          <div
+            v-if="store.loading.value || store.fetchLogs.value.length"
+            class="fetch-log-section"
+          >
+            <div class="fetch-log-head">
+              <span class="fetch-log-title">请求日志</span>
+              <span v-if="store.loading.value" class="fetch-log-status">进行中…</span>
+            </div>
+            <div ref="fetchLogRef" class="fetch-log-body">
+              <div
+                v-for="(entry, idx) in store.fetchLogs.value"
+                :key="idx"
+                :class="['fetch-log-line', logLevelClass(entry.level)]"
+              >
+                <span class="log-time">{{ formatLogTime(entry.timestamp) }}</span>
+                <span class="log-text">{{ entry.message }}</span>
+              </div>
+              <p v-if="!store.fetchLogs.value.length && store.loading.value" class="fetch-log-empty">
+                等待首个请求响应…
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
+      <div v-if="store.warning.value" class="warning-msg">
+        ⚠️ {{ store.warning.value }}（已加载部分数据，可预览）
+      </div>
       <div v-if="store.error.value" class="error-msg">
         ⚠️ {{ store.error.value }}
       </div>
@@ -695,6 +737,87 @@ async function loadGitHub() {
   border: 1px solid var(--theme-tree-deleted);
   border-radius: 8px;
   color: var(--theme-tree-deleted);
+}
+
+.warning-msg {
+  margin-top: 12px;
+  padding: 12px;
+  flex-shrink: 0;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+  color: #fbbf24;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.fetch-log-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid color-mix(in srgb, var(--theme-text-secondary) 35%, transparent);
+}
+
+.fetch-log-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fetch-log-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}
+
+.fetch-log-status {
+  font-size: 11px;
+  color: var(--theme-accent);
+  animation: blink 1.2s ease-in-out infinite;
+}
+
+.fetch-log-body {
+  max-height: 140px;
+  overflow-y: auto;
+  font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  scrollbar-width: thin;
+}
+
+.fetch-log-line {
+  display: flex;
+  gap: 8px;
+  padding: 1px 0;
+}
+
+.log-time {
+  flex-shrink: 0;
+  color: var(--theme-text-secondary);
+  opacity: 0.75;
+}
+
+.log-text {
+  word-break: break-word;
+}
+
+.log-info .log-text { color: var(--theme-text-primary); }
+.log-warn .log-text { color: #fbbf24; }
+.log-error .log-text { color: var(--theme-tree-deleted); }
+
+.fetch-log-empty {
+  margin: 0;
+  color: var(--theme-text-secondary);
+  font-size: 11px;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 @media (max-height: 700px) {

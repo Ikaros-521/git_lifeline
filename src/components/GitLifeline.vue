@@ -226,6 +226,9 @@ function createExportDriver(): ExportDriver {
         📂
       </button>
     </div>
+    <div v-if="store.warning.value" class="warning-banner">
+      ⚠️ {{ store.warning.value }}
+    </div>
   </div>
 </template>
 
@@ -266,5 +269,23 @@ function createExportDriver(): ExportDriver {
   border-color: var(--theme-accent);
   background: var(--theme-accent);
   color: #fff;
+}
+
+.warning-banner {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(640px, calc(100% - 32px));
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: rgba(251, 191, 36, 0.15);
+  border: 1px solid #f59e0b;
+  color: #fbbf24;
+  font-size: 13px;
+  line-height: 1.5;
+  z-index: 25;
+  text-align: center;
+  backdrop-filter: blur(6px);
 }
 </style>
