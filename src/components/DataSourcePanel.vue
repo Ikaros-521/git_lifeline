@@ -252,7 +252,7 @@ async function loadGitHub() {
             v-model="pasteText"
             class="paste-input"
             placeholder="在此粘贴 git log 输出..."
-            rows="10"
+            rows="6"
           ></textarea>
           <button class="btn-primary" :disabled="!pasteText.trim()" @click="loadPaste">
             📊 开始分析
@@ -314,37 +314,44 @@ async function loadGitHub() {
   align-items: center;
   justify-content: center;
   background: var(--theme-bg);
-  padding: 20px;
+  padding: 16px;
+  overflow: hidden;
 }
 
 .panel-card {
   max-width: 560px;
   width: 100%;
-  padding: 40px;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 32px;
   border-radius: 16px;
   background: var(--theme-control-bg);
   border: 1px solid color-mix(in srgb, var(--theme-accent) 35%, transparent);
   box-shadow:
     0 20px 60px rgba(0, 0, 0, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  overflow: hidden;
 }
 
 .title {
   font-size: 2rem;
   margin-bottom: 8px;
   text-align: center;
+  flex-shrink: 0;
 }
 
 .subtitle {
   text-align: center;
   color: var(--theme-text-secondary);
-  margin-bottom: 32px;
+  margin-bottom: 24px;
 }
 
 .tabs {
   display: flex;
   gap: 8px;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
+  flex-shrink: 0;
 }
 
 .tab {
@@ -366,7 +373,20 @@ async function loadGitHub() {
 }
 
 .tab-content {
-  min-height: 200px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--theme-accent) 40%, transparent) transparent;
+}
+
+.tab-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.tab-content::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--theme-accent) 40%, transparent);
+  border-radius: 3px;
 }
 
 .tab-pane {
@@ -564,6 +584,11 @@ async function loadGitHub() {
   resize: vertical;
 }
 
+.paste-input {
+  min-height: 96px;
+  max-height: 200px;
+}
+
 .url-input {
   font-family: inherit;
 }
@@ -663,11 +688,31 @@ async function loadGitHub() {
 }
 
 .error-msg {
-  margin-top: 16px;
+  margin-top: 12px;
   padding: 12px;
+  flex-shrink: 0;
   background: rgba(248,113,113,0.15);
   border: 1px solid var(--theme-tree-deleted);
   border-radius: 8px;
   color: var(--theme-tree-deleted);
+}
+
+@media (max-height: 700px) {
+  .panel-card {
+    padding: 20px 24px;
+  }
+
+  .title {
+    font-size: 1.5rem;
+  }
+
+  .subtitle {
+    margin-bottom: 16px;
+    font-size: 14px;
+  }
+
+  .preview-svg {
+    height: 140px;
+  }
 }
 </style>
