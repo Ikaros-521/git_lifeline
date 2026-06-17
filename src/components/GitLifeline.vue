@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, watch, inject, computed, type Ref } from 'vue'
+import { ref, watch, inject, computed, nextTick, type Ref } from 'vue'
 import { useCommitStore } from '../composables/useCommitStore'
 import { useAnimationEngine } from '../composables/useAnimationEngine'
 import { getThemeVars } from '../utils/colors'
-import type { Commit } from '../data/types'
+import type { Commit, PathFilter } from '../data/types'
 import type { BurstPoint } from '../engine/TreeRenderer'
 import TreeView from './TreeView.vue'
 import ParticleCanvas from './ParticleCanvas.vue'
@@ -11,6 +11,7 @@ import TimelineControl from './TimelineControl.vue'
 import DetailPanel from './DetailPanel.vue'
 import ThemePicker from './ThemePicker.vue'
 import ExportDialog from './ExportDialog.vue'
+import PathFilterPanel from './PathFilterPanel.vue'
 import type { CompositeSources } from '../utils/frameCompositor'
 import { EXPORT_FPS, type ExportDriver } from '../utils/videoExporter'
 
@@ -23,6 +24,7 @@ const treeViewRef = ref<InstanceType<typeof TreeView> | null>(null)
 const particleRef = ref<InstanceType<typeof ParticleCanvas> | null>(null)
 const showDetail = ref(false)
 const showExport = ref(false)
+const showPathFilter = ref(false)
 const selectedCommitIndex = ref(0)
 
 const engine = useAnimationEngine(store.totalCommits.value)
@@ -66,9 +68,20 @@ watch(readyToRender, (ready) => {
   console.log('[GitLifeline] initial render', idx, snapshot.commit.hash, snapshot.commit.files.length)
 })
 
-// Sync engine total when data loads
+const filterSummary = computed(() => {
+  if (!store.filterActive.value) return null
+  const hidden = store.filteredOutCommits.value
+  if (store.totalCommits.value === 0) return '路径筛选后没有可展示的提交'
+  if (hidden > 0) return `路径筛选中 · 已隐藏 ${hidden} 个提交`
+  return '路径筛选已启用'
+})
+
+// Sync engine total when data loads or filter changes
 watch(() => store.totalCommits.value, (n) => {
   engine.setTotal(n)
+  if (engine.currentIndex.value >= n) {
+    engine.seek(Math.max(0, n - 1))
+  }
 })
 
 // When animation index/progress changes (playback), update tree + particles
@@ -121,7 +134,22 @@ function onSpeedChange(speed: number) {
 }
 
 function onNewProject() {
+  store.resetPathFilter()
   emit('new-project')
+}
+
+function onApplyPathFilter(filter: PathFilter) {
+  store.setPathFilter(filter)
+  showPathFilter.value = false
+  engine.pause()
+  engine.seek(0)
+  selectedCommitIndex.value = 0
+  nextTick(() => {
+    const snapshot = store.snapshots.value[0]
+    if (snapshot && treeViewRef.value?.renderer) {
+      treeViewRef.value.renderer.update(snapshot.tree, 0, 0)
+    }
+  })
 }
 
 function getExportSources(): CompositeSources | null {
@@ -215,7 +243,23 @@ function createExportDriver(): ExportDriver {
       :create-export-driver="createExportDriver"
       @close="showExport = false"
     />
+    <PathFilterPanel
+      v-if="showPathFilter"
+      :filter="store.pathFilter.value"
+      :raw-total="store.rawTotalCommits.value"
+      :filtered-total="store.totalCommits.value"
+      @apply="onApplyPathFilter"
+      @close="showPathFilter = false"
+    />
     <div class="top-actions">
+      <button
+        class="action-btn"
+        :class="{ active: store.filterActive.value }"
+        @click="showPathFilter = true"
+        title="路径筛选"
+      >
+        🔍
+      </button>
       <button class="action-btn" @click="showDetail = !showDetail" title="详情">
         📋
       </button>
@@ -225,6 +269,9 @@ function createExportDriver(): ExportDriver {
       <button class="action-btn" @click="onNewProject" title="新建项目">
         📂
       </button>
+    </div>
+    <div v-if="filterSummary" class="filter-banner">
+      {{ filterSummary }}
     </div>
     <div v-if="store.warning.value" class="warning-banner">
       ⚠️ {{ store.warning.value }}
@@ -269,6 +316,28 @@ function createExportDriver(): ExportDriver {
   border-color: var(--theme-accent);
   background: var(--theme-accent);
   color: #fff;
+}
+
+.action-btn.active {
+  border-color: var(--theme-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--theme-accent) 35%, transparent);
+}
+
+.filter-banner {
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(480px, calc(100% - 32px));
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--theme-accent) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 55%, transparent);
+  color: var(--theme-text-primary);
+  font-size: 12px;
+  z-index: 25;
+  text-align: center;
+  backdrop-filter: blur(6px);
 }
 
 .warning-banner {

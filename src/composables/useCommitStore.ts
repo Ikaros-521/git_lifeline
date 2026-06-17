@@ -1,7 +1,12 @@
 import { ref, computed } from 'vue'
-import type { Commit, BranchNode, TreeNode, CommitSnapshot } from '../data/types'
+import type { Commit, BranchNode, TreeNode, CommitSnapshot, PathFilter } from '../data/types'
 import { getSampleCommits } from '../data/sampleData'
 import { parseGitLog } from '../data/adapters/GitLogParser'
+import {
+  applyPathFilter,
+  DEFAULT_PATH_FILTER,
+  isPathFilterActive
+} from '../utils/pathFilter'
 import {
   fetchGitHubCommits,
   parseGitHubUrl,
@@ -57,9 +62,11 @@ function buildTreeFromFiles(files: string[], newFiles: Set<string>, deletedFiles
 }
 
 /** Module-level singleton state */
+const rawCommits = ref<Commit[]>([])
 const commits = ref<Commit[]>([])
 const branches = ref<BranchNode[]>([])
 const snapshots = ref<CommitSnapshot[]>([])
+const pathFilter = ref<PathFilter>({ ...DEFAULT_PATH_FILTER })
 const loading = ref(false)
 const error = ref<string | null>(null)
 const warning = ref<string | null>(null)
@@ -67,28 +74,51 @@ const fetchLogs = ref<GitHubProgressLog[]>([])
 
 export function useCommitStore() {
   const totalCommits = computed(() => commits.value.length)
-  const hasData = computed(() => commits.value.length > 0)
+  const rawTotalCommits = computed(() => rawCommits.value.length)
+  const hasData = computed(() => rawCommits.value.length > 0)
+  const filterActive = computed(() => isPathFilterActive(pathFilter.value))
+  const filteredOutCommits = computed(() =>
+    Math.max(0, rawCommits.value.length - commits.value.length)
+  )
+
+  function applyFilterAndRebuild() {
+    commits.value = applyPathFilter(rawCommits.value, pathFilter.value)
+    branches.value = inferBranches(commits.value)
+    buildSnapshots()
+    if (commits.value.length > 0 && error.value?.startsWith('路径筛选')) {
+      error.value = null
+    } else if (rawCommits.value.length > 0 && commits.value.length === 0 && filterActive.value) {
+      error.value = '路径筛选后没有可展示的提交，请调整白/黑名单规则'
+    }
+  }
+
+  function setPathFilter(filter: PathFilter) {
+    pathFilter.value = { ...filter }
+    if (rawCommits.value.length > 0) applyFilterAndRebuild()
+  }
+
+  function resetPathFilter() {
+    setPathFilter({ ...DEFAULT_PATH_FILTER })
+  }
 
   /** Load sample demo data */
   function loadSample() {
     const data = getSampleCommits()
-    commits.value = data.commits
-    branches.value = data.branches
+    rawCommits.value = data.commits
     error.value = null
     warning.value = null
     fetchLogs.value = []
-    buildSnapshots()
+    applyFilterAndRebuild()
   }
 
   /** Parse pasted git log text */
   function loadFromPaste(raw: string) {
     try {
-      commits.value = parseGitLog(raw)
-      branches.value = inferBranches(commits.value)
+      rawCommits.value = parseGitLog(raw)
       error.value = null
       warning.value = null
       fetchLogs.value = []
-      buildSnapshots()
+      applyFilterAndRebuild()
     } catch (e) {
       error.value = `解析失败: ${e instanceof Error ? e.message : String(e)}`
     }
@@ -112,17 +142,16 @@ export function useCommitStore() {
           fetchLogs.value = [...fetchLogs.value, log]
         }
       })
-      commits.value = result.commits
-      branches.value = inferBranches(commits.value)
+      rawCommits.value = result.commits
 
       if (result.warnings.length) {
         warning.value = result.warnings.join('；')
       }
 
-      if (commits.value.length === 0) {
+      if (rawCommits.value.length === 0) {
         error.value = '未获取到任何提交，请检查仓库 URL 或缩小/调整日期范围'
       } else {
-        buildSnapshots()
+        applyFilterAndRebuild()
       }
     } catch (e) {
       error.value = `加载失败: ${e instanceof Error ? e.message : String(e)}`
@@ -180,18 +209,25 @@ export function useCommitStore() {
   }
 
   return {
+    rawCommits,
     commits,
     branches,
     snapshots,
+    pathFilter,
     loading,
     error,
     warning,
     fetchLogs,
     totalCommits,
+    rawTotalCommits,
     hasData,
+    filterActive,
+    filteredOutCommits,
     loadSample,
     loadFromPaste,
-    loadFromGitHub
+    loadFromGitHub,
+    setPathFilter,
+    resetPathFilter
   }
 }
 

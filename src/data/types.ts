@@ -88,3 +88,10 @@ export interface DataSource {
   type: 'github' | 'paste' | 'sample'
   value: string
 }
+
+export type PathFilterMode = 'none' | 'whitelist' | 'blacklist'
+
+export interface PathFilter {
+  mode: PathFilterMode
+  patternsText: string
+}
