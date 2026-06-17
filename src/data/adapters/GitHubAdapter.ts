@@ -25,7 +25,8 @@ const DEFAULT_HEADERS = {
   'User-Agent': 'git-lifeline/1.0'
 }
 
-const DETAIL_DELAY_MS = 250
+const DETAIL_CONCURRENCY = 5
+const BATCH_DELAY_MS = 80
 const MAX_CONSECUTIVE_FAILURES = 3
 
 export type GitHubLogLevel = 'info' | 'warn' | 'error'
@@ -118,24 +119,50 @@ function shortMessage(message: string): string {
   return line.length > 40 ? `${line.slice(0, 40)}…` : line
 }
 
+interface DetailFetchResult {
+  files: FileChange[]
+  rateLimited: boolean
+  failed: boolean
+}
+
+async function fetchCommitDetail(
+  owner: string,
+  repo: string,
+  sha: string
+): Promise<DetailFetchResult> {
+  try {
+    const res = await githubFetch(`/repos/${owner}/${repo}/commits/${sha}`)
+    if (res.status === 403 || res.status === 429) {
+      return { files: [], rateLimited: true, failed: false }
+    }
+    if (res.ok) {
+      const detail: GitHubCommitData = await res.json()
+      return { files: mapFiles(detail.files), rateLimited: false, failed: false }
+    }
+    return { files: [], rateLimited: false, failed: true }
+  } catch {
+    return { files: [], rateLimited: false, failed: true }
+  }
+}
+
 /**
  * Fetch commits from the GitHub REST API (public repos, no auth needed).
  * Rate-limited to 60 requests/hour for unauthenticated requests.
  *
  * Strategy: the /commits list endpoint does NOT include file details.
- * We fetch individual commit details sequentially (with delay) to avoid
- * rate limits and gateway timeouts. On repeated failures we degrade to
- * commits with empty file lists and still return partial results.
+ * Paginate the list until a page returns fewer than per_page items, then
+ * fetch individual commit details in small concurrent batches. On repeated
+ * failures we degrade to commits with empty file lists and still return
+ * partial results.
  */
 export async function fetchGitHubCommits(
   owner: string,
   repo: string,
   options: GitHubFetchOptions = {}
 ): Promise<GitHubFetchResult> {
-  const { since, until, maxCommits = 80, onProgress } = options
+  const { since, until, maxCommits, onProgress } = options
   const perPage = 100
   const warnings: string[] = []
-  const allCommits: Commit[] = []
 
   const log = (level: GitHubLogLevel, message: string) => {
     onProgress?.({ level, message, timestamp: Date.now() })
@@ -143,10 +170,12 @@ export async function fetchGitHubCommits(
 
   log('info', `开始获取 ${owner}/${repo} 的提交数据…`)
 
-  // Phase 1: fetch the commit list (no files yet)
+  // Phase 1: paginate commit list until a page is not full
   const commitListItems: GitHubCommitData[] = []
 
-  for (let page = 1; commitListItems.length < maxCommits; page++) {
+  for (let page = 1; ; page++) {
+    if (maxCommits !== undefined && commitListItems.length >= maxCommits) break
+
     const params = new URLSearchParams({
       per_page: String(perPage),
       page: String(page)
@@ -199,11 +228,15 @@ export async function fetchGitHubCommits(
       break
     }
 
-    const added = data.slice(0, maxCommits - commitListItems.length)
+    const pageFull = data.length >= perPage
+    const added = maxCommits !== undefined
+      ? data.slice(0, maxCommits - commitListItems.length)
+      : data
     commitListItems.push(...added)
-    log('info', `第 ${page} 页获取 ${added.length} 条，累计 ${commitListItems.length} 条`)
+    log('info', `第 ${page} 页获取 ${added.length} 条（${pageFull ? '已满页' : '末页'}），累计 ${commitListItems.length} 条`)
 
-    if (data.length < perPage) break
+    if (!pageFull) break
+    if (maxCommits !== undefined && commitListItems.length >= maxCommits) break
   }
 
   if (!commitListItems.length) {
@@ -211,60 +244,78 @@ export async function fetchGitHubCommits(
     return { commits: [], warnings }
   }
 
-  // Phase 2: fetch file details one-by-one to stay within rate limits.
+  // Phase 2: fetch file details in concurrent batches
+  const fileMap = new Map<string, FileChange[]>()
   let consecutiveFailures = 0
   let detailSkipped = false
   let detailsFetched = 0
   const total = commitListItems.length
 
-  log('info', `开始获取文件变更详情（共 ${total} 条）…`)
+  log('info', `开始获取文件变更详情（共 ${total} 条，并发 ${DETAIL_CONCURRENCY}）…`)
 
-  for (let i = 0; i < commitListItems.length; i++) {
-    const item = commitListItems[i]
-    let files: FileChange[] = []
+  for (let i = 0; i < commitListItems.length && !detailSkipped; i += DETAIL_CONCURRENCY) {
+    const batch = commitListItems.slice(i, i + DETAIL_CONCURRENCY)
+    const batchEnd = Math.min(i + batch.length, total)
 
-    if (!detailSkipped) {
-      if (i > 0) await sleep(DETAIL_DELAY_MS)
+    for (let j = 0; j < batch.length; j++) {
+      const item = batch[j]
+      log('info', `[${i + j + 1}/${total}] 获取 ${shortSha(item.sha)} · ${shortMessage(item.commit.message)}`)
+    }
 
-      log('info', `[${i + 1}/${total}] 获取 ${shortSha(item.sha)} · ${shortMessage(item.commit.message)}`)
+    const results = await Promise.all(
+      batch.map(item => fetchCommitDetail(owner, repo, item.sha))
+    )
 
-      try {
-        const res = await githubFetch(`/repos/${owner}/${repo}/commits/${item.sha}`)
+    let batchSuccesses = 0
+    let batchFailures = 0
+    let rateLimited = false
 
-        if (res.status === 403 || res.status === 429) {
-          const warn = `详情请求触发限流（已完成 ${detailsFetched}/${total}），剩余提交将不含文件变更`
-          if (!warnings.includes(warn)) warnings.push(warn)
-          log('warn', warn)
-          detailSkipped = true
-        } else if (res.ok) {
-          const detail: GitHubCommitData = await res.json()
-          files = mapFiles(detail.files)
-          detailsFetched++
-          consecutiveFailures = 0
-        } else {
-          consecutiveFailures++
-          log('warn', `[${i + 1}/${total}] 详情返回 ${res.status}，跳过文件变更`)
-          if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-            const warn = `连续 ${MAX_CONSECUTIVE_FAILURES} 次详情请求失败，剩余提交将不含文件变更`
-            warnings.push(warn)
-            log('warn', warn)
-            detailSkipped = true
-          }
-        }
-      } catch {
-        consecutiveFailures++
-        log('warn', `[${i + 1}/${total}] 详情请求网络错误`)
-        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-          const warn = `连续 ${MAX_CONSECUTIVE_FAILURES} 次详情请求失败，剩余提交将不含文件变更`
-          warnings.push(warn)
-          log('warn', warn)
-          detailSkipped = true
-        }
+    for (let j = 0; j < batch.length; j++) {
+      const item = batch[j]
+      const result = results[j]
+
+      if (result.rateLimited) {
+        rateLimited = true
+        break
+      }
+      if (result.failed) {
+        batchFailures++
+        log('warn', `[${i + j + 1}/${total}] 详情请求失败，跳过文件变更`)
+      } else {
+        fileMap.set(item.sha, result.files)
+        detailsFetched++
+        batchSuccesses++
       }
     }
 
-    allCommits.push(toCommit(item, files))
+    if (rateLimited) {
+      const warn = `详情请求触发限流（已完成 ${detailsFetched}/${total}），剩余提交将不含文件变更`
+      if (!warnings.includes(warn)) warnings.push(warn)
+      log('warn', warn)
+      detailSkipped = true
+      break
+    }
+
+    if (batchSuccesses > 0) {
+      consecutiveFailures = 0
+    } else if (batchFailures > 0) {
+      consecutiveFailures += batchFailures
+      if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+        const warn = `连续 ${MAX_CONSECUTIVE_FAILURES} 次详情请求失败，剩余提交将不含文件变更`
+        warnings.push(warn)
+        log('warn', warn)
+        detailSkipped = true
+      }
+    }
+
+    if (!detailSkipped && batchEnd < total) {
+      await sleep(BATCH_DELAY_MS)
+    }
   }
+
+  const allCommits = commitListItems.map(item =>
+    toCommit(item, fileMap.get(item.sha) ?? [])
+  )
 
   if (detailsFetched < total && !detailSkipped && detailsFetched > 0) {
     const warn = `${total - detailsFetched} 条提交未获取到文件变更详情`
