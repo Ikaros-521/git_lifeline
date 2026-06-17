@@ -17,8 +17,8 @@ interface GitHubCommitData {
   files?: GitHubCommitFile[]
 }
 
-/** Route through Vite dev/preview proxy to avoid browser CORS on API errors. */
-const API_BASE = '/api/github'
+/** Dev uses Vite proxy; production (GitHub Pages) calls GitHub API directly. */
+const API_BASE = import.meta.env.DEV ? '/api/github' : 'https://api.github.com'
 
 const DEFAULT_HEADERS = {
   Accept: 'application/vnd.github.v3+json',
