@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { quickExport, highQualityFrames, downloadBlob } from '../utils/videoExporter'
+import { quickExport, highQualityFrames, downloadBlob, type ExportDriver } from '../utils/videoExporter'
+import type { CompositeSources } from '../utils/frameCompositor'
+
+const props = defineProps<{
+  getSources: () => CompositeSources | null
+  createExportDriver: () => ExportDriver
+}>()
 
 const emit = defineEmits<{ close: [] }>()
 
@@ -13,25 +19,34 @@ async function doExport() {
   exporting.value = true
   progress.value = 0
 
-  const particleCanvas = document.querySelector('.particle-canvas canvas') as HTMLCanvasElement
-
-  if (!particleCanvas) {
+  const sources = props.getSources()
+  if (!sources) {
     alert('没有找到画布元素')
     exporting.value = false
     return
   }
 
+  const compositeCanvas = document.createElement('canvas')
+  const driver = props.createExportDriver()
+
   try {
     if (mode.value === 'quick') {
-      const blob = await quickExport(particleCanvas, duration.value * 1000, (pct) => {
-        progress.value = pct
-      })
+      const blob = await quickExport(
+        compositeCanvas,
+        sources,
+        duration.value,
+        driver.stepFrame,
+        (pct) => { progress.value = pct }
+      )
       downloadBlob(blob, `git-lifeline-${Date.now()}.webm`)
     } else {
-      const totalFrames = duration.value * 30
-      const frames = highQualityFrames(particleCanvas, totalFrames, (pct) => {
-        progress.value = pct
-      })
+      const frames = await highQualityFrames(
+        compositeCanvas,
+        sources,
+        duration.value,
+        driver.stepFrame,
+        (pct) => { progress.value = pct }
+      )
 
       if (frames.length > 0) {
         const blob = await (await fetch(frames[0])).blob()
@@ -43,6 +58,7 @@ async function doExport() {
   } catch (e) {
     alert(`导出失败: ${e instanceof Error ? e.message : String(e)}`)
   } finally {
+    driver.cleanup()
     exporting.value = false
     progress.value = 0
   }

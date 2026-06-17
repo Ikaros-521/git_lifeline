@@ -70,15 +70,32 @@ export class ParticleSystem {
     }
   }
 
+  /** Pause the automatic animation loop (e.g. during video export). */
+  pause() {
+    this.stop()
+  }
+
+  /** Resume the automatic animation loop. */
+  resume() {
+    if (!this.running) this.start()
+  }
+
+  /** Advance simulation by dt seconds and redraw (for export stepping). */
+  step(dt: number) {
+    this.ctx.clearRect(0, 0, this.canvas.clientWidth, this.canvas.clientHeight)
+    this.simulate(dt)
+    this.draw()
+  }
+
   private loop() {
     if (!this.running) return
     this.ctx.clearRect(0, 0, this.canvas.clientWidth, this.canvas.clientHeight)
-    this.update()
+    this.simulate(1 / 60)
     this.draw()
     this.animationId = requestAnimationFrame(() => this.loop())
   }
 
-  private update() {
+  private simulate(dt: number) {
     // Maintain background particle count
     while (this.particles.filter(p => p.type === 'background').length < this.count) {
       this.particles.push({
@@ -94,8 +111,6 @@ export class ParticleSystem {
         type: 'background'
       })
     }
-
-    const dt = 1 / 60
 
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i]

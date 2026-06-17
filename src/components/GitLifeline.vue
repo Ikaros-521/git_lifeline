@@ -11,6 +11,8 @@ import TimelineControl from './TimelineControl.vue'
 import DetailPanel from './DetailPanel.vue'
 import ThemePicker from './ThemePicker.vue'
 import ExportDialog from './ExportDialog.vue'
+import type { CompositeSources } from '../utils/frameCompositor'
+import { EXPORT_FPS, type ExportDriver } from '../utils/videoExporter'
 
 const emit = defineEmits<{ 'new-project': [] }>()
 
@@ -121,6 +123,67 @@ function onSpeedChange(speed: number) {
 function onNewProject() {
   emit('new-project')
 }
+
+function getExportSources(): CompositeSources | null {
+  const particleCanvas = particleRef.value?.getCanvasElement()
+  const svg = treeViewRef.value?.getSvgElement()
+  if (!particleCanvas || !svg) return null
+  return {
+    particleCanvas,
+    svg,
+    width: particleCanvas.clientWidth,
+    height: particleCanvas.clientHeight
+  }
+}
+
+function createExportDriver(): ExportDriver {
+  const saved = {
+    index: engine.currentIndex.value,
+    progress: engine.interProgress.value,
+    playing: engine.isPlaying.value
+  }
+
+  engine.pause()
+  particleRef.value?.system?.pause()
+
+  let index = 0
+  let progress = 0
+  const EASE_DURATION = 500
+  const progressStep = (1 / EXPORT_FPS) / (EASE_DURATION / 1000) * engine.speed.value
+  const total = store.totalCommits.value
+
+  function stepFrame() {
+    progress += progressStep
+    if (progress >= 1) {
+      if (index < total - 1) {
+        progress = 0
+        index++
+      } else {
+        progress = 1
+      }
+    }
+
+    engine.currentIndex.value = index
+    engine.interProgress.value = progress
+    selectedCommitIndex.value = index
+
+    const snapshot = store.snapshots.value[index]
+    if (snapshot && treeViewRef.value?.renderer) {
+      treeViewRef.value.renderer.update(snapshot.tree, progress, index)
+    }
+    particleRef.value?.system?.step(1 / EXPORT_FPS)
+  }
+
+  function cleanup() {
+    particleRef.value?.system?.resume()
+    engine.pause()
+    engine.seek(saved.index)
+    engine.interProgress.value = saved.progress
+    if (saved.playing) engine.play()
+  }
+
+  return { stepFrame, cleanup }
+}
 </script>
 
 <template>
@@ -148,6 +211,8 @@ function onNewProject() {
     <ThemePicker />
     <ExportDialog
       v-if="showExport"
+      :get-sources="getExportSources"
+      :create-export-driver="createExportDriver"
       @close="showExport = false"
     />
     <div class="top-actions">
