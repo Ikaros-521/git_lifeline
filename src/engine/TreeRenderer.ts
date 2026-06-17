@@ -100,6 +100,19 @@ export class TreeRenderer {
     return this.pinnedId ?? this.hoveredId
   }
 
+  /**
+   * At rest (not playing, progress 0) show the settled snapshot — including
+   * nodes marked isNew. Entry animation only runs during active playback.
+   */
+  private getNodeOpacity(node: TreeNode, p: number, isPlaying: boolean): number {
+    if (node.isDeleted) return 1 - p
+    if (node.isNew) {
+      if (!isPlaying && p === 0) return 1
+      return Math.min(1, p * 2)
+    }
+    return 1
+  }
+
   private getNodeDisplayName(node: TreeNode): string {
     return node.type === 'blob' && node.path ? node.path : node.name
   }
@@ -261,7 +274,7 @@ export class TreeRenderer {
     this.svg.call(zoom)
   }
 
-  update(treeData: TreeNode, interProgress: number, commitIndex = 0) {
+  update(treeData: TreeNode, interProgress: number, commitIndex = 0, isPlaying = false) {
     // Eased progress for snappier, more cinematic motion.
     const p = interProgress
     const popIn = d3.easeBackOut.overshoot(2.2)(Math.min(1, p * 1.4))
@@ -309,11 +322,7 @@ export class TreeRenderer {
         return this.theme.treeBranch
       })
       .attr('stroke-width', d => d.target.data.type === 'blob' ? 1 : 2)
-      .attr('opacity', d => {
-        if (d.target.data.isDeleted) return 1 - p
-        if (d.target.data.isNew) return Math.min(1, p * 2)
-        return 1
-      })
+      .attr('opacity', d => this.getNodeOpacity(d.target.data, p, isPlaying))
 
     // Join nodes
     const nodes = this.g.selectAll<SVGGElement, d3.HierarchyPointNode<TreeNode>>('g.node')
@@ -369,11 +378,10 @@ export class TreeRenderer {
 
     nodesMerge
       .attr('transform', d => `translate(${d.x},${d.y})`)
-      .attr('opacity', d => {
-        if (d.data.isDeleted) return 1 - p
-        if (d.data.isNew) return Math.min(1, p * 2)
-        return 1
-      })
+      .attr('opacity', d => this.getNodeOpacity(d.data, p, isPlaying))
+
+    nodesMerge.select('circle.hit-area')
+      .style('pointer-events', d => this.getNodeOpacity(d.data, p, isPlaying) > 0.05 ? 'all' : 'none')
 
     nodesMerge.select('circle.node-dot')
       .attr('fill', d => {
@@ -385,7 +393,10 @@ export class TreeRenderer {
       .attr('r', d => {
         const base = d.data.type === 'blob' ? 4 : 6
         const activeBoost = d.data.id === activeId ? 1.35 : 1
-        if (d.data.isNew) return base * popIn * activeBoost
+        if (d.data.isNew) {
+          if (!isPlaying && p === 0) return base * activeBoost
+          return base * popIn * activeBoost
+        }
         if (d.data.isDeleted) return base * (1 - p) * activeBoost
         if (d.data.isModified) return base * (1 + 0.8 * pulse) * activeBoost
         return base * activeBoost

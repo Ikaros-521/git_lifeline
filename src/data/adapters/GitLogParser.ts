@@ -36,53 +36,39 @@ export function parseGitLog(raw: string): Commit[] {
     const dateMatch = block.match(/^Date:\s+(.+)$/m)
     const date = dateMatch?.[1]?.trim() ?? ''
 
-    const branchesMatch = block.match(/^Branches:\s+(.+)$/m)
-    const branches = branchesMatch ? branchesMatch[1].split(/,\s*/).filter(Boolean) : []
+    const branches = parseBranchDecorations(
+      block.match(/^Branches:[ \t]*([^\n]*)$/m)?.[1] ?? ''
+    )
 
-    const messageLines: string[] = []
-    const msgSection = block.split(/^Date:\s+.+$/m)[1] ?? ''
-    const msgLines = msgSection.split('\n')
-    let inMsg = false
-    let inFiles = false
+    const afterBranches = block.split(/^Branches:.*$/m)[1] ?? ''
+    const fileLineIndex = afterBranches.search(/^[AMDR]\t/m)
+    const messageSection =
+      fileLineIndex >= 0 ? afterBranches.slice(0, fileLineIndex) : afterBranches
+    const message = messageSection
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .join('\n')
+
     const files: FileChange[] = []
-
-    for (const line of msgLines) {
+    const fileSection = fileLineIndex >= 0 ? afterBranches.slice(fileLineIndex) : ''
+    for (const line of fileSection.split('\n')) {
       const trimmed = line.trim()
-
-      if (!inMsg && trimmed.startsWith('commit ')) continue
-      if (trimmed.startsWith('Author:')) continue
-      if (trimmed.startsWith('Branches:')) continue
-
-      if (!inMsg && trimmed === '') {
-        inMsg = true
-        continue
-      }
-
-      if (inMsg && !inFiles) {
-        if (trimmed === '') {
-          inFiles = true
-          continue
+      if (!trimmed) continue
+      const fileMatch = trimmed.match(/^([AMDR])\t(.+)$/)
+      if (fileMatch) {
+        const statusMap: Record<string, FileStatus> = {
+          A: 'added',
+          M: 'modified',
+          D: 'deleted',
+          R: 'modified',
         }
-        messageLines.push(trimmed)
-        continue
-      }
-
-      if (inFiles && trimmed) {
-        const fileMatch = trimmed.match(/^([AMDR])\t(.+)$/)
-        if (fileMatch) {
-          const statusMap: Record<string, FileStatus> = {
-            A: 'added',
-            M: 'modified',
-            D: 'deleted',
-            R: 'modified'
-          }
-          files.push({
-            path: fileMatch[2],
-            status: statusMap[fileMatch[1]] ?? 'modified',
-            additions: 0,
-            deletions: 0
-          })
-        }
+        files.push({
+          path: fileMatch[2],
+          status: statusMap[fileMatch[1]] ?? 'modified',
+          additions: 0,
+          deletions: 0,
+        })
       }
     }
 
@@ -91,7 +77,7 @@ export function parseGitLog(raw: string): Commit[] {
       author,
       email,
       date,
-      message: messageLines.join('\n').trim(),
+      message,
       branches,
       parents: [],
       files,
@@ -106,6 +92,17 @@ export function parseGitLog(raw: string): Commit[] {
   }
 
   return commits.reverse() // oldest first
+}
+
+/** Parse git %d decorations, e.g. "(HEAD -> master, origin/master)" → ["master", "origin/master"] */
+function parseBranchDecorations(raw: string): string[] {
+  const trimmed = raw.trim()
+  if (!trimmed) return []
+  return trimmed
+    .replace(/[()]/g, '')
+    .split(',')
+    .map((part) => part.replace(/HEAD\s*->\s*/i, '').trim())
+    .filter(Boolean)
 }
 
 export type GitLogHintOptions = {

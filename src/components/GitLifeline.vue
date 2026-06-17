@@ -61,7 +61,7 @@ watch(readyToRender, (ready) => {
   const idx = engine.currentIndex.value
   const snapshot = store.snapshots.value[idx]
   if (!snapshot) return
-  treeViewRef.value!.renderer!.update(snapshot.tree, engine.interProgress.value, idx)
+  treeViewRef.value!.renderer!.update(snapshot.tree, engine.interProgress.value, idx, engine.isPlaying.value)
   const themeVars = getThemeVars()
   particleRef.value?.system?.setTheme(themeVars.particleColor, themeVars.particleCount)
   selectedCommitIndex.value = idx
@@ -85,12 +85,12 @@ watch(() => store.totalCommits.value, (n) => {
 })
 
 // When animation index/progress changes (playback), update tree + particles
-watch([() => engine.currentIndex.value, () => engine.interProgress.value], ([idx, progress]) => {
+watch([() => engine.currentIndex.value, () => engine.interProgress.value, () => engine.isPlaying.value], ([idx, progress]) => {
   if (store.snapshots.value.length === 0) return
   const snapshot = store.snapshots.value[idx]
   if (!snapshot) return
   if (!treeViewRef.value?.renderer) return
-  treeViewRef.value.renderer.update(snapshot.tree, progress, idx)
+  treeViewRef.value.renderer.update(snapshot.tree, progress, idx, engine.isPlaying.value)
   selectedCommitIndex.value = idx
 })
 
@@ -147,7 +147,7 @@ function onApplyPathFilter(filter: PathFilter) {
   nextTick(() => {
     const snapshot = store.snapshots.value[0]
     if (snapshot && treeViewRef.value?.renderer) {
-      treeViewRef.value.renderer.update(snapshot.tree, 0, 0)
+      treeViewRef.value.renderer.update(snapshot.tree, 0, 0, false)
     }
   })
 }
@@ -197,7 +197,7 @@ function createExportDriver(): ExportDriver {
 
     const snapshot = store.snapshots.value[index]
     if (snapshot && treeViewRef.value?.renderer) {
-      treeViewRef.value.renderer.update(snapshot.tree, progress, index)
+      treeViewRef.value.renderer.update(snapshot.tree, progress, index, true)
     }
     particleRef.value?.system?.step(1 / EXPORT_FPS)
   }
