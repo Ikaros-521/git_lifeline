@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useCommitStore } from '../composables/useCommitStore'
-import { getGitLogHint } from '../data/adapters/GitLogParser'
+import { getGitLogHint, GIT_LOG_SINCE_PRESETS, type GitLogShell } from '../data/adapters/GitLogParser'
 
 const emit = defineEmits<{ 'data-loaded': [] }>()
 
@@ -18,6 +18,11 @@ const DATE_PRESETS: { id: DatePreset; label: string; days?: number }[] = [
   { id: 'custom', label: '自定义' }
 ]
 
+const GIT_LOG_SHELLS: { id: GitLogShell; label: string }[] = [
+  { id: 'powershell', label: 'PowerShell' },
+  { id: 'bash', label: 'Bash / Git Bash' }
+]
+
 const activeTab = ref<'sample' | 'paste' | 'github'>('sample')
 const pasteText = ref('')
 const githubUrl = ref('')
@@ -25,6 +30,9 @@ const loadingMsg = ref('')
 const datePreset = ref<DatePreset>('month')
 const customSince = ref('')
 const customUntil = ref('')
+const gitLogShell = ref<GitLogShell>(
+  typeof navigator !== 'undefined' && /Win/i.test(navigator.userAgent) ? 'powershell' : 'bash'
+)
 
 function daysAgo(days: number): Date {
   const d = new Date()
@@ -76,6 +84,18 @@ function formatRangeLabel(): string {
   return `${since.toLocaleDateString('zh-CN')} — ${until.toLocaleDateString('zh-CN')}`
 }
 
+function getPasteGitLogCommand(): string {
+  const shell = gitLogShell.value
+  if (datePreset.value === 'custom') {
+    const opts: { since?: string; until?: string } = {}
+    if (customSince.value) opts.since = customSince.value
+    if (customUntil.value) opts.until = customUntil.value
+    return getGitLogHint(opts, shell)
+  }
+  const since = GIT_LOG_SINCE_PRESETS[datePreset.value]
+  return getGitLogHint(since ? { since } : undefined, shell)
+}
+
 async function loadSample() {
   store.loadSample()
   emit('data-loaded')
@@ -85,6 +105,25 @@ function loadPaste() {
   if (!pasteText.value.trim()) return
   store.loadFromPaste(pasteText.value)
   if (!store.error.value) emit('data-loaded')
+}
+
+function loadFromLogFile(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = () => {
+    const bytes = new Uint8Array(reader.result as ArrayBuffer)
+    let text = ''
+    if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
+      text = new TextDecoder('utf-16le').decode(bytes)
+    } else {
+      text = new TextDecoder('utf-8').decode(bytes)
+    }
+    pasteText.value = text.replace(/^\uFEFF/, '')
+    input.value = ''
+  }
+  reader.readAsArrayBuffer(file)
 }
 
 async function loadGitHub() {
@@ -162,8 +201,53 @@ async function loadGitHub() {
         </div>
 
         <div v-if="activeTab === 'paste'" class="tab-pane">
-          <p>在终端运行以下命令，将输出粘贴到下方：</p>
-          <code class="hint">{{ getGitLogHint() }}</code>
+          <p>在仓库目录运行以下命令，将日志导出到 <code class="inline-code">git-lifeline.log</code>，再打开文件复制内容到下方：</p>
+          <div class="date-range-section">
+            <div class="date-range-head">
+              <span class="date-range-label">提交日期范围</span>
+              <span class="date-range-hint">缩小范围可加快导出、减少文件体积</span>
+            </div>
+            <div class="date-presets">
+              <button
+                v-for="preset in DATE_PRESETS"
+                :key="preset.id"
+                type="button"
+                :class="['preset-btn', { active: datePreset === preset.id }]"
+                @click="selectPreset(preset.id)"
+              >{{ preset.label }}</button>
+            </div>
+            <div v-if="datePreset === 'custom'" class="custom-dates">
+              <label class="date-field">
+                <span>起始</span>
+                <input v-model="customSince" type="date" class="date-input" />
+              </label>
+              <label class="date-field">
+                <span>截止</span>
+                <input v-model="customUntil" type="date" class="date-input" />
+              </label>
+            </div>
+            <p class="range-summary">当前范围：{{ formatRangeLabel() }}</p>
+          </div>
+          <div class="shell-section">
+            <span class="date-range-label">终端类型</span>
+            <div class="date-presets">
+              <button
+                v-for="shell in GIT_LOG_SHELLS"
+                :key="shell.id"
+                type="button"
+                :class="['preset-btn', { active: gitLogShell === shell.id }]"
+                @click="gitLogShell = shell.id"
+              >{{ shell.label }}</button>
+            </div>
+          </div>
+          <code class="hint">{{ getPasteGitLogCommand() }}</code>
+          <p class="shell-hint">请整行复制含开头 <code class="inline-code">[Console]::OutputEncoding</code> 的完整命令；缺少前缀时 Out-File 或 <code class="inline-code">&gt;</code> 都会在中文 Windows 上乱码。也可直接点下方按钮导入文件。</p>
+          <div class="paste-actions">
+            <label class="btn-secondary file-btn">
+              📂 从 git-lifeline.log 导入
+              <input type="file" accept=".log,.txt" class="file-input" @change="loadFromLogFile" />
+            </label>
+          </div>
           <textarea
             v-model="pasteText"
             class="paste-input"
@@ -404,6 +488,14 @@ async function loadGitHub() {
   100% { transform: scale(1); opacity: 0.95; }
 }
 
+.inline-code {
+  font-family: monospace;
+  font-size: 0.92em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
 .hint {
   font-size: 12px;
   padding: 12px;
@@ -411,6 +503,55 @@ async function loadGitHub() {
   border-radius: 8px;
   word-break: break-all;
   font-family: monospace;
+}
+
+.shell-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.shell-hint {
+  margin: -8px 0 0;
+  font-size: 12px;
+  color: var(--theme-text-secondary);
+  line-height: 1.5;
+}
+
+.paste-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.file-btn {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.file-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 16px;
+  border: 1px solid var(--theme-text-secondary);
+  background: transparent;
+  color: var(--theme-text-primary);
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+  border-color: var(--theme-accent);
+  color: var(--theme-accent);
 }
 
 .paste-input, .url-input {

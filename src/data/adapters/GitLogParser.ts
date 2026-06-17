@@ -108,9 +108,51 @@ export function parseGitLog(raw: string): Commit[] {
   return commits.reverse() // oldest first
 }
 
+export type GitLogHintOptions = {
+  since?: string
+  until?: string
+}
+
+export type GitLogShell = 'powershell' | 'bash'
+
+/** Relative --since values for common date presets. */
+export const GIT_LOG_SINCE_PRESETS: Record<string, string> = {
+  week: '1 week ago',
+  month: '1 month ago',
+  quarter: '3 months ago',
+  halfYear: '6 months ago',
+  year: '1 year ago',
+}
+
+const GIT_LOG_FORMAT = 'commit %H%nAuthor: %an <%ae>%nDate:   %ad%nBranches: %d%n%n  %s%n%n%b'
+
+/** PowerShell prefix: git stdout is UTF-8 but PS decodes external programs as GBK by default. */
+const POWERSHELL_UTF8_PREFIX =
+  '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $OutputEncoding = [System.Text.UTF8Encoding]::new($false); '
+
 /**
- * Build a git log command hint for users.
+ * Build a git log command that exports to git-lifeline.log (UTF-8).
+ * PowerShell: set console encoding then Out-File — plain `>` writes UTF-16,
+ * and piping without the prefix decodes git output as GBK on Chinese Windows.
  */
-export function getGitLogHint(): string {
-  return `git log --all --stat --name-status --date=iso --format="commit %H%nAuthor: %an <%ae>%nDate:   %ad%nBranches: %d%n%n  %s%n%n%b" --no-color`
+export function getGitLogHint(options?: GitLogHintOptions, shell: GitLogShell = 'powershell'): string {
+  if (shell === 'powershell') {
+    const parts = [
+      `${POWERSHELL_UTF8_PREFIX}git -c i18n.logOutputEncoding=UTF-8 log --all --name-status --date=iso`,
+      `--format='${GIT_LOG_FORMAT}'`,
+      '--no-color',
+    ]
+    if (options?.since) parts.push(`--since='${options.since}'`)
+    if (options?.until) parts.push(`--until='${options.until}'`)
+    return `${parts.join(' ')} | Out-File -Encoding utf8 git-lifeline.log`
+  }
+
+  const parts = [
+    'git -c i18n.logOutputEncoding=utf-8 log --all --name-status --date=iso',
+    `--format="${GIT_LOG_FORMAT}"`,
+    '--no-color',
+  ]
+  if (options?.since) parts.push(`--since="${options.since}"`)
+  if (options?.until) parts.push(`--until="${options.until}"`)
+  return `${parts.join(' ')} > git-lifeline.log`
 }
